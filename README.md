@@ -19,3 +19,4 @@ RWKV-6.0b differences (vs RWKV-6.0): GroupNorm => LayerNorm, and remove "gate" i
 
 ./train.sh --model_type "mamba" --layer 12 --emb 768 --lr_init "6e-4" --lr_final "2e-4" --ctx_len 512 --n_gpu 4 --m_bsz 32 --grad_cp 0 --save_period 1000 --suffix "-0"
 ```
+![rwkv-x060b-mamba](rwkv-x060b-mamba.png)
