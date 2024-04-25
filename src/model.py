@@ -281,9 +281,9 @@ class RWKV_Tmix_x060b(MyModule):
 
         xxx = x + xx * self.time_maa_x
         xxx = torch.tanh(xxx @ self.time_maa_rkvw_w1).view(B*T, 4, -1).transpose(0, 1)
-        xxx = torch.bmm(xxx, self.time_maa_rkvw_w2).view(4, B, T, -1)
-        r, k, v, w = xxx.unbind(dim=0)
+        xxx = torch.bmm(xxx, self.time_maa_rkvw_w2).view(4, B, T, C)
 
+        r, k, v, w = xxx.unbind(dim=0)
         r = x + xx * (self.time_maa_r + r)
         k = x + xx * (self.time_maa_k + k)
         v = x + xx * (self.time_maa_v + v)
@@ -487,20 +487,28 @@ class RWKV(pl.LightningModule):
                     lr_1x.add(n)
             elif ("time_first" in n) and (args.layerwise_lr > 0):
                 lr_3x.add(n)
+            elif ('.A_log' in n) or n.endswith('.bias'): # mamba
+                lr_1x.add(n)
             elif (len(p.squeeze().shape) >= 2) and (args.weight_decay > 0):
                 lr_decay.add(n)
             else:
                 lr_1x.add(n)
 
+        param_dict = {n: p for n, p in self.named_parameters()}
+        param_check = list(lr_decay) + list(lr_1x) + list(lr_2x) + list(lr_3x)
+        assert sorted(param_dict) == sorted(param_check)
+
         lr_decay = sorted(list(lr_decay))
         lr_1x = sorted(list(lr_1x))
         lr_2x = sorted(list(lr_2x))
         lr_3x = sorted(list(lr_3x))
-        # print('decay', lr_decay)
-        # print('1x', lr_1x)
-        # print('2x', lr_2x)
-        # print('3x', lr_3x)
-        param_dict = {n: p for n, p in self.named_parameters()}
+        
+        if self.trainer.is_global_zero:
+            print('decay', lr_decay, '\n')
+            print('1x', lr_1x, '\n')
+            print('2x', lr_2x, '\n')
+            print('3x', lr_3x, '\n')
+
         
         if args.layerwise_lr > 0:
             if args.train_stage == 2:
@@ -652,6 +660,9 @@ class RWKV(pl.LightningModule):
                         nn.init.uniform_(m[n], a=scale, b=-scale)
                     else:
                         nn.init.orthogonal_(m[n], gain=scale)
+
+            # if 'blocks.23' in n or 'blocks.' not in n:
+            #     print(n, m[n])
 
             m[n] = m[n].cpu()
             if os.environ["RWKV_FLOAT_MODE"] == "fp16":
